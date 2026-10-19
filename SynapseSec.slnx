@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SynapseSec.Tests/SynapseSec.Tests.csproj" />
+  <Project Path="SynapseSec/SynapseSec.csproj" />
+</Solution>
