@@ -1,127 +1,109 @@
 ﻿
+using System.Text.Json;
 using SynapseSec.Models;
 using SynapseSec.Pipeline;
 using SynapseSec.Policies;
 
 var sessions = SampleData.CreateSessions();
 
-
-Console.WriteLine(" Assignment 5: Risk Policies ");
+Console.WriteLine("SynapseSec: Neural Risk Tracker");
 Console.WriteLine();
-Console.WriteLine("Safe-Net Policy");
 
-var safeReport = RiskPipeline.Run(
-    sessions,
-    RiskPolicies.SafeNet);
+// --- Assignment 5 ---
+Console.WriteLine("Assignment 5: Risk Policy Evaluation\n");
+PrintReport("Safe-Net", RiskPipeline.Run(sessions, RiskPolicies.SafeNet));
+PrintReport("Overclock", RiskPipeline.Run(sessions, RiskPolicies.Overclock));
 
-foreach (var result in safeReport)
-{
-    Console.WriteLine(
-        $"{result.SessionId}: Risk = {result.RiskScore}");
-}
-
-Console.WriteLine();
-Console.WriteLine("Overclock Policy");
-
-var overclockReport = RiskPipeline.Run(
-    sessions,
-    RiskPolicies.Overclock);
-
-foreach (var result in overclockReport)
-{
-    Console.WriteLine(
-        $"{result.SessionId}: Risk = {result.RiskScore}");
-}
-
-//demonstrate temporal coupling protection.
-Console.WriteLine();
-Console.WriteLine(" Assignment 6: Safe Workflow ");
-
+// --- Assignment 6 ---
+Console.WriteLine("Assignment 6: Workflow Validation\n");
 var workflow = new RiskAssessmentWorkflow();
 
-var earlyAssessment = workflow.Assess(
-    session => 10 * session.StressLevel);
+PrintStep("1. Call Before Prepare", workflow.Assess(s => 10 * s.StressLevel));
 
-switch (earlyAssessment)
+if (workflow.Prepare(sessions[0]) is SessionValidationResult.Valid { Session: var validSession })
 {
-    case WorkflowOperationResult.Success success:
-        Console.WriteLine(
-            $"Unexpected success: {success.Assessment.RiskScore}");
-        break;
-
-    case WorkflowOperationResult.Rejected rejected:
-        Console.WriteLine(
-            $"Assessment before validation rejected: {rejected.Reason}");
-        break;
-
-    default:
-        throw new InvalidOperationException(
-            "Unknown workflow operation result.");
+    Console.WriteLine($"[2. Validated] {validSession.OperatorId} ({validSession.OperatorName}) | Implant: {validSession.ImplantModel}");
+    PrintStep("3. Valid Assessment", workflow.Assess(s => RiskPolicies.SafeNet(s.ToRaw())));
+    PrintStep("4. Repeated Call", workflow.Assess(s => 10 * s.StressLevel));
 }
 
-//prepare a session through the factory.
-var preparation = workflow.Prepare(sessions[0]);
+// --- Assignment 7 ---
+Console.WriteLine("\nAssignment 7: Error Handling\n");
 
-switch (preparation)
+// 1. Normal success and zero risk
+PrintDiagnosis("Normal Success (Lucy)", RiskPipeline.DiagnoseOperator(sessions, "NC-02", RiskPolicies.SafeNet));
+PrintDiagnosis("Zero-Value Lookup (Kiwi = 0 risk)", RiskPipeline.DiagnoseOperator(sessions, "NC-06", RiskPolicies.SafeNet));
+
+// 2. Domain errors and missing operator
+PrintDiagnosis("Domain Error 1 (MentalBreakdown)", RiskPipeline.DiagnoseOperator(sessions, "NC-03", RiskPolicies.Overclock));
+
+var uncertifiedList = new[]
 {
-    case SessionValidationResult.Valid valid:
-        Console.WriteLine(
-            $"Validation successful: {valid.Session.OperatorId}");
+    new NeuralSession { OperatorId = "NC-08", OperatorName = "Adam Smasher", ImplantModel = "Borg-Frame-9000 (Illegal)", StressLevel = 5, SessionDurationHours = 2, NeuralLoadGhz = 4 }
+};
+PrintDiagnosis("Domain Error 2 (ImplantNotRecognized)", RiskPipeline.DiagnoseOperator(uncertifiedList, "NC-08", RiskPolicies.SafeNet));
 
-        var assessment = workflow.Assess(
-            session => 10 * session.StressLevel
-                + 2 * session.SessionDurationHours);
+var corruptedList = new[]
+{
+    new NeuralSession { OperatorId = "NC-09", OperatorName = "Johnny Silverhand", ImplantModel = "Arasaka Mk.IV (Corporate)", StressLevel = 15, SessionDurationHours = -2, NeuralLoadGhz = 5 }
+};
+PrintDiagnosis("Domain Error 3 (BrainwaveCorrupted)", RiskPipeline.DiagnoseOperator(corruptedList, "NC-09", RiskPolicies.SafeNet));
+PrintDiagnosis("Missing Lookup (OperatorNotFound)", RiskPipeline.DiagnoseOperator(sessions, "NC-404", RiskPolicies.SafeNet));
 
-        switch (assessment)
-        {
-            case WorkflowOperationResult.Success completed:
-                Console.WriteLine(
-                    $"Assessment completed: " +
-                    $"{completed.Assessment.SessionId}, " +
-                    $"Risk = {completed.Assessment.RiskScore}");
-                break;
+// 3. File loading tests
+string tempDir = Path.Combine(Path.GetTempPath(), "SynapseSecDemo");
+Directory.CreateDirectory(tempDir);
+string validJsonPath = Path.Combine(tempDir, "sessions.json");
+string brokenJsonPath = Path.Combine(tempDir, "corrupted.json");
 
-            case WorkflowOperationResult.Rejected rejected:
-                Console.WriteLine(
-                    $"Assessment rejected: {rejected.Reason}");
-                break;
+File.WriteAllText(validJsonPath, JsonSerializer.Serialize(sessions));
+File.WriteAllText(brokenJsonPath, "{ \"invalid_json\": [ unclosed ");
 
-            default:
-                throw new InvalidOperationException(
-                    "Unknown workflow operation result.");
-        }
+PrintFileOutcome("Valid JSON", RiskPipeline.LoadSessionsFromJson(validJsonPath));
+PrintFileOutcome("Missing File", RiskPipeline.LoadSessionsFromJson(Path.Combine(tempDir, "missing.json")));
+PrintFileOutcome("Malformed JSON", RiskPipeline.LoadSessionsFromJson(brokenJsonPath));
 
-        //a second assessment must be rejected.
-        var repeatedAssessment = workflow.Assess(
-            session => 10 * session.StressLevel);
+Directory.Delete(tempDir, recursive: true);
 
-        switch (repeatedAssessment)
-        {
-            case WorkflowOperationResult.Success repeated:
-                Console.WriteLine(
-                    $"Unexpected repeated success: " +
-                    $"{repeated.Assessment.RiskScore}");
-                break;
-
-            case WorkflowOperationResult.Rejected rejected:
-                Console.WriteLine(
-                    $"Repeated assessment rejected: {rejected.Reason}");
-                break;
-
-            default:
-                throw new InvalidOperationException(
-                    "Unknown workflow operation result.");
-        }
-
-        break;
-
-    case SessionValidationResult.Invalid invalid:
-        Console.WriteLine(
-            $"Validation failed: {string.Join(" ", invalid.Errors)}");
-        break;
-
-    default:
-        throw new InvalidOperationException(
-            "Unknown validation result.");
+// helper methods for printing results
+static void PrintReport(string policyName, IReadOnlyList<RiskAssessment> report)
+{
+    Console.WriteLine($"Policy: {policyName}");
+    foreach (var r in report)
+    {
+        string status = RiskPolicies.ClassifyStatus(r.RiskScore);
+        Console.WriteLine($"  {r.SessionId} | {r.OperatorName,-17} | {r.ImplantModel,-37} | Risk: {r.RiskScore,5:F1} -> {status}");
+        Console.WriteLine($"        Reason: {r.Reason}");
+    }
+    Console.WriteLine();
 }
 
+static void PrintStep(string label, WorkflowOperationResult result) =>
+    Console.WriteLine(result switch
+    {
+        WorkflowOperationResult.Success { Assessment: var a } =>
+            $"[{label}] {a.SessionId} ({a.OperatorName}) -> Risk = {a.RiskScore:F1} ({a.Reason})",
+        WorkflowOperationResult.Rejected { Reason: var r } =>
+            $"[{label}] Rejected: {r}",
+        _ => throw new InvalidOperationException("Unknown workflow result.")
+    });
+
+static void PrintDiagnosis(string label, Result<OperatorStatus, NeuralError> result) =>
+    Console.WriteLine(result switch
+    {
+        Result<OperatorStatus, NeuralError>.Success { Value: var s } =>
+            $"  [SUCCESS - {label}] {s.OperatorId} ({s.OperatorName}) | Risk: {s.RiskScore:F1} | {s.Status} | {s.Reason}",
+        Result<OperatorStatus, NeuralError>.Failure { Error: var e } =>
+            $"  [FAILURE - {label}] [{e.Code}] {e.Message}",
+        _ => throw new InvalidOperationException("Unknown result.")
+    });
+
+static void PrintFileOutcome(string label, Result<IReadOnlyList<NeuralSession>, NeuralError> result) =>
+    Console.WriteLine(result switch
+    {
+        Result<IReadOnlyList<NeuralSession>, NeuralError>.Success { Value: var list } =>
+            $"  [FILE OK - {label}] Loaded {list.Count} sessions safely.",
+        Result<IReadOnlyList<NeuralSession>, NeuralError>.Failure { Error: var e } =>
+            $"  [FILE ERROR - {label}] [{e.Code}] {e.Message}",
+        _ => throw new InvalidOperationException("Unknown file result.")
+    });

@@ -1,28 +1,32 @@
 
 using SynapseSec.Models;
+using SynapseSec.Policies;
 
 namespace SynapseSec.Pipeline;
 
-//converts calculated scores to ordered report
+// creates a report with risk scores for all sessions
 public static class RiskReportStage
 {
     public static IReadOnlyList<RiskAssessment> CreateReport(
         IReadOnlyList<NeuralSession> sessions,
         IReadOnlyList<double> scores)
     {
+        // checks if the input lists are valid
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(scores);
 
         if (sessions.Count != scores.Count)
-        {
-            throw new ArgumentException(
-                "The number of sessions must match the number of scores.");
-        }
+            throw new ArgumentException("The number of sessions must match the number of scores.");
 
-        return sessions
-            .Select((session, index) =>
-                new RiskAssessment(session.OperatorId, scores[index]))
-            .OrderByDescending(result => result.RiskScore)
+        // creates the report and sorts it from highest risk to lowest
+        return sessions 
+            .Select((s, i) => new RiskAssessment(
+                s.OperatorId,
+                scores[i],
+                s.OperatorName,
+                s.ImplantModel,
+                RiskPolicies.ExplainReason(s, scores[i])))
+            .OrderByDescending(r => r.RiskScore)
             .ToArray();
     }
 }

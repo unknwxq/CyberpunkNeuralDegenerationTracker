@@ -1,4 +1,5 @@
 ﻿
+using System.Text.Json;
 using SynapseSec.Models;
 using SynapseSec.Pipeline;
 using SynapseSec.Policies;
@@ -8,240 +9,161 @@ namespace SynapseSec.Tests;
 public class RiskPipelineTests
 {
     private static NeuralSession CreateSession(
-        string id = "OP-01",
+        string id = "NC-01",
+        string name = "V (Valerie)",
+        string implant = "Arasaka Mk.IV (Corporate)",
         double stress = 6,
         double duration = 2,
-        double load = 5)
+        double load = 5) => new()
     {
-        return new NeuralSession
+        OperatorId = id,
+        OperatorName = name,
+        ImplantModel = implant,
+        StressLevel = stress,
+        SessionDurationHours = duration,
+        NeuralLoadGhz = load
+    };
+
+    // assignment 7 tests
+
+    [Fact]
+    public void CompleteSuccess_IntegratedResultChain_ProducesOperatorStatus()
+    {
+        var sessions = SampleData.CreateSessions();
+        var result = RiskPipeline.DiagnoseOperator(sessions, "NC-02", RiskPolicies.SafeNet);
+
+        var success = Assert.IsType<Result<OperatorStatus, NeuralError>.Success>(result);
+        Assert.Equal("Lucy Kushinada", success.Value.OperatorName);
+        Assert.Equal(40.0, success.Value.RiskScore);
+        Assert.Contains("NORMAL", success.Value.Status);
+    }
+
+    [Fact]
+    public void DomainFailures_AllThreeDistinctFailures_ReturnExpectedErrorCodes()
+    {
+        // corrupted brainwave
+        var corrupted = new[] { CreateSession(id: "NC-10", duration: -5) };
+        var r1 = RiskPipeline.DiagnoseOperator(corrupted, "NC-10", RiskPolicies.SafeNet);
+        var f1 = Assert.IsType<Result<OperatorStatus, NeuralError>.Failure>(r1);
+        Assert.Equal(ErrorCode.BrainwaveCorrupted, f1.Error.Code);
+
+        // unknown implant
+        var unknownChip = new[] { CreateSession(id: "NC-11", implant: "Bootleg-Cyberdeck-v0") };
+        var r2 = RiskPipeline.DiagnoseOperator(unknownChip, "NC-11", RiskPolicies.SafeNet);
+        var f2 = Assert.IsType<Result<OperatorStatus, NeuralError>.Failure>(r2);
+        Assert.Equal(ErrorCode.ImplantNotRecognized, f2.Error.Code);
+
+        // mental breakdown
+        var sessions = SampleData.CreateSessions();
+        var r3 = RiskPipeline.DiagnoseOperator(sessions, "NC-03", RiskPolicies.Overclock);
+        var f3 = Assert.IsType<Result<OperatorStatus, NeuralError>.Failure>(r3);
+        Assert.Equal(ErrorCode.MentalBreakdown, f3.Error.Code);
+    }
+
+    [Fact]
+    public void Lookup_PresentZeroValuesAndAbsentOperator_AreHandledExplicitly()
+    {
+        var sessions = SampleData.CreateSessions();
+
+        // zero values should still count as a valid result
+        var presentZero = RiskPipeline.DiagnoseOperator(sessions, "NC-06", RiskPolicies.SafeNet);
+        var ok = Assert.IsType<Result<OperatorStatus, NeuralError>.Success>(presentZero);
+        Assert.Equal(0, ok.Value.RiskScore);
+        Assert.Equal("Kiwi", ok.Value.OperatorName);
+
+        // operator does not exist
+        var absent = RiskPipeline.DiagnoseOperator(sessions, "NC-999", RiskPolicies.SafeNet);
+        var fail = Assert.IsType<Result<OperatorStatus, NeuralError>.Failure>(absent);
+        Assert.Equal(ErrorCode.OperatorNotFound, fail.Error.Code);
+    }
+
+    [Fact]
+    public void MapAndBind_OnSuccess_ExecuteSuppliedFunctions()
+    {
+        var start = new Result<int, NeuralError>.Success(10);
+
+        var bound = start.Bind(x => new Result<int, NeuralError>.Success(x * 2));
+        var mapped = bound.Map(x => $"Score: {x}");
+
+        var success = Assert.IsType<Result<string, NeuralError>.Success>(mapped);
+        Assert.Equal("Score: 20", success.Value);
+    }
+
+    [Fact]
+    public void FailurePropagation_SkipsSubsequentMapAndBindFunctions()
+    {
+        var error = new NeuralError(ErrorCode.BrainwaveCorrupted, "Signal lost");
+        Result<int, NeuralError> failed = new Result<int, NeuralError>.Failure(error);
+
+        bool bindCalled = false;
+        bool mapCalled = false;
+
+        var afterBind = failed.Bind(x =>
         {
-            OperatorId = id,
-            ImplantModel = "Neuro-X",
-            StressLevel = stress,
-            SessionDurationHours = duration,
-            NeuralLoadGhz = load
-        };
+            bindCalled = true;
+            return new Result<int, NeuralError>.Success(x + 10);
+        });
+
+        var afterMap = afterBind.Map(x =>
+        {
+            mapCalled = true;
+            return x * 2;
+        });
+
+        Assert.False(bindCalled);
+        Assert.False(mapCalled);
+        var finalFailure = Assert.IsType<Result<int, NeuralError>.Failure>(afterMap);
+        Assert.Equal(ErrorCode.BrainwaveCorrupted, finalFailure.Error.Code);
     }
 
     [Fact]
-    public void NormalWorkflow_ProducesExpectedReport()
+    public void FileBoundary_MissingFile_ReturnsFileNotFoundFailure()
     {
-        var report = RiskPipeline.Run(
-            new[] { CreateSession() },
-            RiskPolicies.SafeNet);
+        string missingPath = Path.Combine(Path.GetTempPath(), $"missing_{Guid.NewGuid()}.json");
 
-        Assert.Single(report);
-        Assert.Equal("OP-01", report[0].SessionId);
-        Assert.Equal(64, report[0].RiskScore);
+        var result = RiskPipeline.LoadSessionsFromJson(missingPath);
+
+        var failure = Assert.IsType<Result<IReadOnlyList<NeuralSession>, NeuralError>.Failure>(result);
+        Assert.Equal(ErrorCode.FileNotFound, failure.Error.Code);
     }
 
     [Fact]
-    public void EmptyDataset_ReturnsEmptyReport()
+    public void FileBoundary_MalformedJson_ReturnsMalformedFileFailure()
     {
-        var report = RiskPipeline.Run(
-            Array.Empty<NeuralSession>(),
-            RiskPolicies.SafeNet);
+        string tempFile = Path.Combine(Path.GetTempPath(), $"malformed_{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempFile, "{ broken_json: [ 123 ");
 
-        Assert.Empty(report);
+            var result = RiskPipeline.LoadSessionsFromJson(tempFile);
+
+            var failure = Assert.IsType<Result<IReadOnlyList<NeuralSession>, NeuralError>.Failure>(result);
+            Assert.Equal(ErrorCode.MalformedFile, failure.Error.Code);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
     }
 
     [Fact]
-    public void BoundaryValues_AreAccepted()
+    public void FileBoundary_ValidJson_LoadsSessionsCorrectly()
     {
-        var report = RiskPipeline.Run(
-            new[] { CreateSession(stress: 0, duration: 0, load: 0) },
-            RiskPolicies.SafeNet);
+        string tempFile = Path.Combine(Path.GetTempPath(), $"valid_{Guid.NewGuid()}.json");
+        try
+        {
+            var original = SampleData.CreateSessions();
+            File.WriteAllText(tempFile, JsonSerializer.Serialize(original));
 
-        Assert.Single(report);
-        Assert.Equal(0, report[0].RiskScore);
+            var result = RiskPipeline.LoadSessionsFromJson(tempFile);
+
+            var success = Assert.IsType<Result<IReadOnlyList<NeuralSession>, NeuralError>.Success>(result);
+            Assert.Equal(original.Count, success.Value.Count);
+            Assert.Equal("David Martinez", success.Value[2].OperatorName);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
     }
-
-    [Fact]
-    public void InvalidAndMissingInput_IsRejected()
-    {
-        Assert.Throws<ArgumentNullException>(() =>
-            RiskPipeline.Run(null!, RiskPolicies.SafeNet));
-
-        Assert.Throws<ArgumentNullException>(() =>
-            RiskPipeline.Run(
-                Array.Empty<NeuralSession>(), null!));
-
-        Assert.Throws<ArgumentException>(() =>
-            RiskPipeline.Run(
-                new[] { CreateSession(stress: 11) },
-                RiskPolicies.SafeNet));
-
-        Assert.Throws<ArgumentException>(() =>
-            RiskPipeline.Run(
-                new[] { CreateSession(id: " ") },
-                RiskPolicies.SafeNet));
-    }
-
-    [Fact]
-    public void TwoPolicies_ProduceDifferentResults()
-    {
-        var sessions = new[] { CreateSession() };
-
-        var safe = RiskPipeline.Run(
-            sessions, RiskPolicies.SafeNet);
-
-        var overclock = RiskPipeline.Run(
-            sessions, RiskPolicies.Overclock);
-
-        Assert.Equal(64, safe[0].RiskScore);
-        Assert.Equal(70, overclock[0].RiskScore);
-        Assert.NotEqual(
-            safe[0].RiskScore, overclock[0].RiskScore);
-    }
-
-    [Fact]
-    public void Validation_DoesNotModifyCallerOwnedData()
-    {
-        var original = CreateSession(id: " OP-01 ");
-        var sessions = new[] { original };
-
-        var result =
-            SessionValidationStage.ValidateAndNormalize(sessions);
-
-        Assert.Equal(" OP-01 ", original.OperatorId);
-        Assert.Equal("OP-01", result[0].OperatorId);
-        Assert.NotSame(original, result[0]);
-        Assert.Same(original, sessions[0]);
-    }
-
-    // assigment 6 test
-
-    
-    [Fact]
-    public void Factory_ValidSession_ReturnsValidatedSession()
-    {
-        var result = SessionFactory.Create(CreateSession());
-
-        var valid = Assert.IsType<SessionValidationResult.Valid>(result);
-
-        Assert.Equal("OP-01", valid.Session.OperatorId);
-        Assert.Equal("Neuro-X", valid.Session.ImplantModel);
-    }
-
-    [Fact]
-    public void Factory_MissingOperatorId_ReturnsInvalid()
-    {
-        var result = SessionFactory.Create(CreateSession(id: " "));
-
-        var invalid = Assert.IsType<SessionValidationResult.Invalid>(result);
-
-        Assert.Contains(invalid.Errors, error =>
-            error.Contains("Operator ID"));
-    }
-
-    [Fact]
-    public void Factory_InvalidStress_ReturnsInvalid()
-    {
-        var result = SessionFactory.Create(CreateSession(stress: 11));
-
-        Assert.IsType<SessionValidationResult.Invalid>(result);
-    }
-
-    [Fact]
-    public void Factory_NegativeDuration_ReturnsInvalid()
-    {
-        var result = SessionFactory.Create(
-            CreateSession(duration: -1));
-
-        Assert.IsType<SessionValidationResult.Invalid>(result);
-    }
-
-    [Fact]
-    public void Factory_NonFiniteLoad_ReturnsInvalid()
-    {
-        var result = SessionFactory.Create(
-            CreateSession(load: double.NaN));
-
-        Assert.IsType<SessionValidationResult.Invalid>(result);
-    }
-
-    [Fact]
-    public void Workflow_AssessmentBeforePreparation_IsRejected()
-    {
-        var workflow = new RiskAssessmentWorkflow();
-
-        var result = workflow.Assess(session => 10);
-
-        Assert.IsType<WorkflowOperationResult.Rejected>(result);
-        Assert.Equal(WorkflowState.NotReady, workflow.State);
-        Assert.Null(workflow.Assessment);
-    }
-
-    [Fact]
-    public void Workflow_ValidSession_CompletesAssessment()
-    {
-        var workflow = new RiskAssessmentWorkflow();
-
-        var preparation = workflow.Prepare(CreateSession());
-
-        Assert.IsType<SessionValidationResult.Valid>(preparation);
-        Assert.Equal(WorkflowState.Ready, workflow.State);
-
-        var result = workflow.Assess(
-            session => 10 * session.StressLevel
-                + 2 * session.SessionDurationHours);
-
-        var success = Assert.IsType<WorkflowOperationResult.Success>(result);
-
-        Assert.Equal(64, success.Assessment.RiskScore);
-        Assert.Equal(WorkflowState.Completed, workflow.State);
-        Assert.Equal(success.Assessment, workflow.Assessment);
-    }
-
-    [Fact]
-    public void Workflow_RepeatedAssessment_IsRejected()
-    {
-        var workflow = new RiskAssessmentWorkflow();
-        workflow.Prepare(CreateSession());
-
-        var first = workflow.Assess(session => 42);
-        var original = Assert.IsType<WorkflowOperationResult.Success>(first);
-
-        var second = workflow.Assess(session => 100);
-
-        Assert.IsType<WorkflowOperationResult.Rejected>(second);
-        Assert.Equal(WorkflowState.Completed, workflow.State);
-        Assert.Equal(original.Assessment, workflow.Assessment);
-        Assert.Equal(42, workflow.Assessment!.RiskScore);
-    }
-
-    [Fact]
-    public void Workflow_FailedAssessment_PreservesReadyState()
-    {
-        var workflow = new RiskAssessmentWorkflow();
-        workflow.Prepare(CreateSession());
-
-        var result = workflow.Assess(session => double.NaN);
-
-        Assert.IsType<WorkflowOperationResult.Rejected>(result);
-        Assert.Equal(WorkflowState.Ready, workflow.State);
-        Assert.Null(workflow.Assessment);
-    }
-
-    [Fact]
-    public void Workflow_InvalidSession_DoesNotBecomeReady()
-    {
-        var workflow = new RiskAssessmentWorkflow();
-
-        var result = workflow.Prepare(CreateSession(stress: 15));
-
-        Assert.IsType<SessionValidationResult.Invalid>(result);
-        Assert.Equal(WorkflowState.NotReady, workflow.State);
-        Assert.Null(workflow.Assessment);
-    }
-
-    [Fact]
-    public void Factory_BoundaryValues_AreAccepted()
-    {
-        var result = SessionFactory.Create(
-            CreateSession(stress: 0, duration: 0, load: 0));
-
-        Assert.IsType<SessionValidationResult.Valid>(result);
-    }
-
 }

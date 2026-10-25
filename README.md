@@ -1,129 +1,122 @@
 # SynapseSec
 ## 1. About the project
-The project works with neural session data and calculates risk scores for different operators. 
-It has two risk policies: Safe-Net and Overclock.
-Assignment 5 focused on functional programming, data validation, risk calculation, and report generation.
-Assignment 6 improves the project by making the order of operations safer and easier to understand.
+The project works with cyberpunk neural session data and calculates risk scores for different operators so they dont go full cyberpsycho in middle of work.
+In Assignment 5 we did functional programming pipeline, data validation, risk calculation, and report generation.
+In Assignment 6 we fixed temporal coupling by making order of operations safe with state machine and factory.
+Now in Assignment 7 we added functional error handling with Result, missing value lookup with LookupResult, function chaining with Map and Bind, and safe JSON file loading without crashing the whole program.
 
-## 2. The problem in Assignment 6
-The main topic of Assignment 6 is Temporal Coupling.
-Temporal coupling happens when a program needs methods to be called in a specific order.
-If a developer forgets one step, the program may work with incorrect data or produce an incorrect result.
-For example, a neural session should be validated before calculating its risk.
-In the original version, a developer could call the risk calculator directly with a normal NeuralSession object. 
-The calculator did not know if the data had been validated.
-The new workflow makes this order explicit:
-1. Validate the input.
-2. Create a validated session.
-3. Calculate the risk.
-4. Save the result and complete the workflow.
+Also we cleaned up code, added Compose function to remove ugly copy paste lines, added real characters from Cyberpunk 2077 and Edgerunners, and made implant models actually matter in math calculations
 
-## 3. How validation works
-The SessionFactory class checks the input data before creating a validated session.
-The validation rules are:
-- Operator ID cannot be empty.
-- Implant model cannot be empty.
-- Session duration must be finite and non-negative.
-- Neural load must be finite and non-negative.
-- Stress level must be between 0 and 10.
-- Text values are trimmed after successful validation.
-The factory returns one of two results:
+## 2. What we changed in code and models
+Before this update all operators had boring names like OP-01 and implant model was just useless text string. Now we upgraded it:
+- Added OperatorName field so every ID belongs to real character like V, Lucy Kushinada, David Martinez, Rebecca, Panam Palmer, Kiwi, and Songbird.
+- Added implant specifications in RiskPolicies.Implants dictionary. Every implant now has its own safe frequency limit MaxSafeGhz and risk Multiplier:
+- Zetatech Bio-Link (Budget) - cheap plastic chip, safe limit is 3.0 GHz, multiplier is 1.2
+- Arasaka Mk.IV (Corporate) - standard corporate chip, safe limit is 4.0 GHz, multiplier is 1.0
+- Biotechnica NeuraLux (Exclusive) - luxury cyberware for rich people, safe limit is 6.0 GHz, multiplier is 0.8 because it cools down the brain
+- Maelstrom Ripper-Mod (Black-Market) - shady street implant, safe limit is 3.5 GHz, multiplier is 1.4
+- Militech Sandevistan-X (NextGen-Beta) - crazy military prototype, safe limit is 4.5 GHz, multiplier is 1.5 (David Martinez uses it and obviously gets cooked)
 
-- Valid contains a ValidatedNeuralSession
-- Invalid contains a list of error messages
+Also on console output the program now prints human text Reason so you can actually understand why risk score is high or normal instead of staring at random numbers.
 
-If the input is invalid, the factory does not create a validated session.
-The original NeuralSession object is not modified. 
-The validated model has read-only properties and an internal constructor, so other projects cannot create it directly.
+## 3. The problem in Assignment 7
+In normal C# code people just throw exceptions for every single problem. If input is bad or implant is wrong, program throws exception and dies. In functional programming throwing exceptions for normal business rules is bad idea because it breaks the pipeline flow.
 
-## 4. Workflow and states
-The RiskAssessmentWorkflow class controls the order of operations.
-It has three states:
+In Assignment 7 we solved this problem:
+1. Expected business errors do not throw exceptions anymore, they return Result.Failure with error code and message.
+2. Real try-catch is used only at application boundary when reading JSON files from disk.
+3. Steps are connected with Map and Bind so if error happens on step 1, next steps are automatically skipped and program does not do useless work
 
-- NotReady — the session has not been validated successfully.
-- Ready — the session is valid and can be assessed.
-- Completed — the risk assessment is finished and the result is saved.
-The workflow has two main methods.
+## 4. Explicit domain outcomes (Task 1)
+We created closed abstract record Result in Result.cs with two cases:
+- Success - contains valid value after operation
+- Failure - contains NeuralError object with ErrorCode and text explanation
 
-### Prepare()
-The Prepare() method uses SessionFactory to validate the input.
-If validation succeeds, the workflow stores the validated session and changes its state to Ready.
-If validation fails, the workflow stays in NotReady and returns the validation errors.
+We implemented 3 different expected domain failures:
+1. BrainwaveCorrupted - happens in SessionFactory.CreateResult() when session numbers are broken, for example negative duration hours, stress level above 10, or empty operator ID.
+2. ImplantNotRecognized - happens in SessionFactory.CreateResult() when operator uses illegal uncertified cyberware that does not exist in our official RiskPolicies.Implants list (like Adam Smasher with Borg-Frame-9000).
+3. MentalBreakdown - happens in RiskPipeline.EvaluateSafeRisk() when calculated risk score is 150 or higher. For example David Martinez on Overclock policy gets 180 risk score and system stops him with MentalBreakdown error before his brain melts the fuck down.
 
-### Assess()
-The Assess() method calculates the risk only when the workflow is in the Ready state.
-After a successful calculation, it stores the result and changes the state to Completed.
-If the assessment is called before validation, the workflow rejects the operation.
-A second assessment is also rejected after the workflow reaches Completed.
-If the policy throws an exception or returns a non-finite score, the workflow does not save the result or change to Completed.
-These rules help prevent operations from being called in the wrong order.
+## 5. Missing values and LookupResult (Task 2)
+When we search for operator by ID in RiskPipeline.LookupSession(), we do not return null because null causes bugs everywhere. Instead we created LookupResult with two cases:
+- Found - carries the found NeuralSession object
+- NotFound - carries the missing operator ID string
 
-## 5. Pattern matching
-The project uses pattern matchig with switch statements to handle different results.
-For validation, the program checks whether the result is Valid or Invalid.
-For workflow operations, it checks whether the operation was Success or Reected.
-Each case has its own behavior. Successful results continue to the next step, while rejected operations show an error message.
-The code also has a fallback branch for an unknown result.
-This makes the program easier to understand because success and failure are handled explicitly.
+Then RequireSession() converts NotFound into Result.Failure with ErrorCode.OperatorNotFound.
+One super important rule in Assignment 7 is that zero values are valid data, not missing data. In our sample data Kiwi (NC-06) has StressLevel = 0, SessionDurationHours = 0, and NeuralLoadGhz = 0. When we search for NC-06, LookupSession returns Found, calculates 0.0 risk score, and gives Success with NORMAL status. It never confuses zero numbers with missing person
 
-## 6. Risk policies
-The project uses two risk policies.
+## 6. Map and Bind composition (Task 3)
+Inside Result.cs we wrote two functions to chain operations together:
+- Bind - used when next function can also fail and returns another Result
+- Map - used when next function is pure transformation and always succeeds
+
+In RiskPipeline.DiagnoseOperator() we chained the whole operator diagnosis into one pipeline:
+1. RequireSession() finds operator by ID or returns OperatorNotFound failure.
+2. Bind(SessionFactory.CreateResult) validates numbers and checks if implant is certified.
+3. Bind(EvaluateSafeRisk) calculates risk score using policy and checks if score is below 150 limit.
+4. Map() takes valid RiskAssessment and converts it into final OperatorStatus report with status label and text reason.
+
+If any step returns Failure, Map and Bind just pass that Failure to the end and do not call the next functions at all.
+Also we added Compose function in RiskCalculator.cs to combine ToRaw conversion with policy function so code in RiskPipeline is short and clean.
+
+## 7. File boundary exception handling (Task 4)
+Reading files from disk can fail for reasons outside our domain logic, so we put JSON loading in RiskPipeline.LoadSessionsFromJson() at the boundary:
+- Missing file - if file path does not exist or IOException happens, it returns Result.Failure with FileNotFound code.
+- Malformed file - if JSON file has broken syntax or null data, catch block catches JsonException and returns Result.Failure with MalformedFile code.
+- Valid file - reads JSON, deserializes list of sessions, and returns Result.Success without breaking existing data in memory.
+
+## 8. Risk policies math
 ### Safe-Net
 The formula is:
-10 * StressLevel + 2 * SessionDurationHours
-This policy calculates risk using the operator's stress level and session duration.
+(10 * StressLevel + 2 * SessionDurationHours) * ImplantMultiplier
+This corporate policy checks stress and session duration hours, then multiplies by chip factor.
 
 ### Overclock
 The formula is:
-10 * StressLevel + 10 * max(0, NeuralLoadGhz - 4)^2
-This policy also considers neural load above 4 GHz.
-Both formulas are preserved from Assignment 5.
-The RiskCalculator accepts a validated session, while RiskPolicies contains the risk calculation functions.
+(10 * StressLevel + 10 * max(0, NeuralLoadGhz - ImplantMaxSafeGhz)^2) * ImplantMultiplier
+This street policy ignores duration hours, but punishes operator hard if NeuralLoadGhz goes higher than safe GHz limit of their specific implant
 
-## 7. Main files
+## 9. Main files
 ### Models
-- NeuralSession.cs — stores the original session data.
-- ValidatedNeuralSession.cs — represents a session that passed validation.
-- SessionValidationResult.cs — contains the Valid and Invalid cases.
-- WorkflowOperationResult.cs — contains the Success and Rejected cases.
-- RiskAssessment.cs — stores the operator ID and calculated risk score.
-- SampleData.cs — provides sample sessions for the application.
+- Result.cs - contains Result, LookupResult, NeuralError, and ErrorCode enum for Assignment 7.
+- NeuralSession.cs - stores raw session data including OperatorName.
+- ValidatedNeuralSession.cs - session that passed validation, has internal constructor.
+- SessionValidationResult.cs - contains Valid and Invalid cases for Assignment 6.
+- WorkflowOperationResult.cs - contains Success and Rejected cases for workflow.
+- RiskAssessment.cs - stores operator ID, name, implant, score, and reason.
+- OperatorStatus.cs - final status model created by Map in Assignment 7.
+- SampleData.cs - sample sessions with Cyberpunk characters and implants.
 
 ### Pipeline
-- SessionFactory.cs — validates input and creates validated sessions.
-- RiskAssessmentWorkflow.cs — controls the workflow states and operations.
-- RiskPipeline.cs — processes multiple sessions and creates a report.
-- SessionValidationStage.cs — keeps the original validation method compatible with the existing code.
-- RiskReportStage.cs — creates and sorts the final report.
+- SessionFactory.cs - Create() for Assignment 6 and CreateResult() for Assignment 7 validation.
+- RiskAssessmentWorkflow.cs - controls workflow states NotReady, Ready, and Completed.
+- RiskPipeline.cs - contains Run(), LookupSession(), RequireSession(), EvaluateSafeRisk(), DiagnoseOperator() chain, and LoadSessionsFromJson().
+- SessionValidationStage.cs - normalizes session list.
+- RiskReportStage.cs - creates and sorts final report by risk score.
 
 ### Policies
-- RiskCalculator.cs — provides the calculation entry point for validated sessions.
-- RiskPolicies.cs — contains the Safe-Net and Overclock formulas.
+- RiskCalculator.cs - contains Compose method, ToRaw converter, and Calculate entry point.
+- RiskPolicies.cs - contains Implants dictionary, SafeNet and Overclock formulas, status classifier, and reason generator.
 
 ### Other files
-- Program.cs — demonstrates the Assignment 5 policies and the Assignment 6 workflow.
-- SynapseSec.Tests/UnitTest1.cs — contains automated tests for the project.
+- Program.cs - runs demonstrations for Assignment 5, Assignment 6, and Assignment 7.
+- SynapseSec.Tests/UnitTest1.cs - contains 25 automated tests.
 
-## 8. Tests
-The project contains 17 automated tests.
-The tests check the original functionality and the new workflow.
-They cover:
-- Normal risk calculation.
-- Empty input data.
-- Boundary values.
-- Missing input and invalid session data.
-- Different results from the two policies.
-- Protection of the original input data.
-- Successful session creation.
-- Validation errors.
-- Assessment before validation.
-- Successful workflow completion.
-- Repeated assessment.
-- State preservation after a failed assessment.
-After implementing the changes, all 17 tests passed.
-The build also completed successfully
+## 10. Tests
+The project now has 25 automated tests (17 from Assignments 5 and 6, plus 8 new tests for Assignment 7).
+The Assignment 7 tests cover:
+- Complete success chain through DiagnoseOperator for Lucy (NC-02).
+- All 3 domain failures: BrainwaveCorrupted, ImplantNotRecognized, and MentalBreakdown.
+- Present lookup with all zero values (Kiwi NC-06) and absent lookup (NC-999).
+- Map and Bind executing functions on Success.
+- Failure propagation test with bool flags proving that Map and Bind skip their functions when Result is Failure.
+- Missing JSON file returning FileNotFound failure.
+- Malformed JSON file returning MalformedFile failure using temporary file cleanup.
+- Valid JSON file loading sessions properly.
 
-## 9. How to build and run
+All 25 tests pass with 0 errors.
+
+## 11. How to build and run
 The project targets .NET 10.
 Open PowerShell in the project root directory.
 Check the installed SDK:
@@ -142,65 +135,39 @@ Run the application:
 
     dotnet run --project .\SynapseSec\SynapseSec.csproj
 
-The application first prints the Safe-Net and Overclock reports.
+First it prints Assignment 5 reports for Safe-Net and Overclock with character names and reasons.
+Second it shows Assignment 6 state machine checks.
+Third it shows Assignment 7 results: normal diagnosis, zero value lookup for Kiwi, 3 domain errors, missing operator error, valid JSON load, missing file error, and broken JSON error.
 
-Then it demonstrates the Assignment 6 workflow, including an assessment rejected before validation, a successful assessment, and a repeated assessment rejected after completion.
-
-## 10. Assignment 6 criteria
-The implementation covers the main requirements of Assignment 6:
-- Validated factory: input is checked before a validated session is created.
-- Closed result model: validation returns Valid or Invalid.
-- Pattern matching: the application handles the different result cases using switch.
-- Explicit states: the workflow uses NotReady, Ready, and Completed.
-- Missing prerequisite: assessment before successful preparation is rejected.
-- Repeated operation: assessment after completion is rejected.
-- State preservation: failed validation or assessment does not incorrectly advance the workflow.
-- Automated tests: 17 tests cover the original pipeline and the new behavior.
-- Documentation: the project structure, validation rules, workflow, and run commands are described here.
-
-## 11. Individual contribution
-Group: Yeraly Tanzharyk - Lead Developer, 
+## 12. Individual contribution
+Group: IT-2513
+Student: Yeraly Tanzharyk - Lead Developer
 Project ownership and overall technical direction.
-Core architecture and final design decisions.
-Main implementation and integration of all components.
-Code review, debugging, testing, and final verification.
-Coordination of AI assistants and evaluation of their suggestions.
+Upgraded domain idea with Cyberpunk characters and unique implant weights.
+Implemented Result, LookupResult, Map and Bind composition, and Compose function.
+Implemented 3 domain errors, DiagnoseOperator pipeline, and JSON file boundary handling.
+Wrote all 25 automated tests and updated documentation.
 Final responsibility for every line of code delivered.
+
 Supporting AI Contributors
 
 ChatGPT
-Assisted with explaining programming concepts.
-Provided occasional suggestions for code improvements.
-Helped prepare documentation and README descriptions.
-Served as a secondary technical consultant.
+Assisted with explaining functional programming concepts and why throwing exceptions in pure functions is bad.
+Helped with simple explanations.
 
 Claude
-Provided alternative approaches to selected implementation problems.
-Assisted with reviewing code structure.
+Provided ideas for simplifying switch statements and cleaning up long methods.
 
 Google Gemini
-Contributed additional ideas during the planning stage.
-Offered alternative explanations for technical concepts.
+Contributed ideas for Assignment 7 Result chain, implant multipliers, and test cases.
 
 DeepSeek
-Assisted with exploring possible solutions to selected coding challenges.
-Provided supplementary debugging suggestions.
+Assisted with debugging compiler errors when types did not want to match.
 
-GitHub Copilot
-Offered occasional code completion suggestions.
-Assisted with reducing repetitive typing.
+GitHub Copilot and Cursor AI
+Offered code completion suggestions so my hands dont fall off from typing boilerplate shit.
 
-Cursor AI
-Provided supplementary code-editing suggestions.
-Assisted with selected refactoring tasks.
+Microsoft Learn and Stack Overflow Community
+Honorary consulting department for .NET 10 documentation and weird compiler errors.
 
-Microsoft Learn
-Served as a reference source for C# and .NET documentation.
-
-Stack Overflow Community
-Honorary consulting department for obscure errors and questionable compiler behaviour.
-Student: Yeraly Tazharyk
-
-I worked on the project individually all by myself with my besties like one developer several ai assistants. My work included implementing the risk policies, 
-validation, the safe workflow, pattern matching, state handling, 
-automated tests, and project documentation.
+I worked on the project individually all by myself with my besties like one developer managing several AI assistants. My work included implementing the risk policies, implant tiers, validation factory, safe workflow, Result and Lookup models, Map and Bind pipeline, JSON file handling, automated tests, and project documentation.
