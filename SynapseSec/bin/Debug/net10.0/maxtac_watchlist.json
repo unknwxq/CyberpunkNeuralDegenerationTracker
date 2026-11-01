@@ -1,0 +1,26 @@
+[
+  {
+    "OperatorId": "NC-03",
+    "OperatorName": "David Martinez",
+    "RiskScore": 180,
+    "Advice": "CALL MAXTAC PSYCHO SQUAD \u002B Relic Biochip Purge"
+  },
+  {
+    "OperatorId": "NC-04",
+    "OperatorName": "Rebecca",
+    "RiskScore": 154,
+    "Advice": "CALL MAXTAC PSYCHO SQUAD \u002B Relic Biochip Purge"
+  },
+  {
+    "OperatorId": "NC-07",
+    "OperatorName": "Songbird (So Mi)",
+    "RiskScore": 135,
+    "Advice": "Inject 2x Viktor Immunoblockers \u002B Trauma Team Alert"
+  },
+  {
+    "OperatorId": "NC-01",
+    "OperatorName": "V (Valerie)",
+    "RiskScore": 70,
+    "Advice": "Inject 2x Viktor Immunoblockers \u002B Trauma Team Alert"
+  }
+]

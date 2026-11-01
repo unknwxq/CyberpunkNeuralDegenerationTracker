@@ -1,19 +1,19 @@
-
 namespace SynapseSec.Models;
 
 public enum ErrorCode
 {
-    BrainwaveCorrupted,   // error 1: wrong metrics like negative time or stress above 10
-    ImplantNotRecognized, // error 2: implant is unknown or not certified
-    MentalBreakdown,      // error 3: risk score is too high or state is wrong
+    BrainwaveCorrupted,   // error 1: wrong metrics like negative time, or stress above 10
+    ImplantNotRecognized, // error 2: implant is unknown, or not certified
+    MentalBreakdown,      // error 3: risk score is too high, or state is wrong
     OperatorNotFound,     // operator id was not found
     FileNotFound,         // json file does not exist
-    MalformedFile         // json file has wrong content
+    MalformedFile,        // json file has wrong content
+    NativeCallFailed      // native c library failed, or got bad numbers
 }
 
 public sealed record NeuralError(ErrorCode Code, string Message);
 
-// stores lookup result when value is found or missing
+// stores lookup result when value is found, or missing
 public abstract record LookupResult<T>
 {
     private LookupResult() { }
@@ -21,7 +21,7 @@ public abstract record LookupResult<T>
     public sealed record NotFound(string Key) : LookupResult<T>;
 }
 
-// result type with map and bind methods
+// result type with map, and bind methods
 public abstract record Result<T, E>
 {
     private Result() { }

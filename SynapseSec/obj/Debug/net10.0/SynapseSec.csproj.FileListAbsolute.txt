@@ -1,0 +1,17 @@
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\bin\Debug\net10.0\SynapseSec.exe
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\bin\Debug\net10.0\SynapseSec.deps.json
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\bin\Debug\net10.0\SynapseSec.runtimeconfig.json
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\bin\Debug\net10.0\SynapseSec.dll
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\bin\Debug\net10.0\SynapseSec.pdb
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\SynapseSec.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\SynapseSec.AssemblyInfoInputs.cache
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\SynapseSec.AssemblyInfo.cs
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\SynapseSec.csproj.CoreCompileInputs.cache
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\SynapseSec.sourcelink.json
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\SynapseSec.dll
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\refint\SynapseSec.dll
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\SynapseSec.pdb
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\SynapseSec.genruntimeconfig.cache
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\obj\Debug\net10.0\ref\SynapseSec.dll
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\bin\Debug\net10.0\sessions.json
+C:\Users\erali\Desktop\Final project\CyberpunkNeuralDegenerationTracker\SynapseSec\bin\Debug\net10.0\cybersignal.dll

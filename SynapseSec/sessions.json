@@ -1,0 +1,58 @@
+[
+  {
+    "OperatorId": "NC-01",
+    "OperatorName": "V (Valerie)",
+    "ImplantModel": "Arasaka Mk.IV (Corporate)",
+    "SessionDurationHours": 2,
+    "NeuralLoadGhz": 5.0,
+    "StressLevel": 6
+  },
+  {
+    "OperatorId": "NC-02",
+    "OperatorName": "Lucy Kushinada",
+    "ImplantModel": "Biotechnica NeuraLux (Exclusive)",
+    "SessionDurationHours": 5,
+    "NeuralLoadGhz": 5.5,
+    "StressLevel": 4
+  },
+  {
+    "OperatorId": "NC-03",
+    "OperatorName": "David Martinez",
+    "ImplantModel": "Militech Sandevistan-X (NextGen-Beta)",
+    "SessionDurationHours": 2,
+    "NeuralLoadGhz": 6.5,
+    "StressLevel": 8
+  },
+  {
+    "OperatorId": "NC-04",
+    "OperatorName": "Rebecca",
+    "ImplantModel": "Maelstrom Ripper-Mod (Black-Market)",
+    "SessionDurationHours": 1,
+    "NeuralLoadGhz": 5.5,
+    "StressLevel": 7
+  },
+  {
+    "OperatorId": "NC-05",
+    "OperatorName": "Panam Palmer",
+    "ImplantModel": "Zetatech Bio-Link (Budget)",
+    "SessionDurationHours": 4,
+    "NeuralLoadGhz": 3.0,
+    "StressLevel": 3
+  },
+  {
+    "OperatorId": "NC-06",
+    "OperatorName": "Kiwi",
+    "ImplantModel": "Arasaka Mk.IV (Corporate)",
+    "SessionDurationHours": 0,
+    "NeuralLoadGhz": 0.0,
+    "StressLevel": 0
+  },
+  {
+    "OperatorId": "NC-07",
+    "OperatorName": "Songbird (So Mi)",
+    "ImplantModel": "Militech Sandevistan-X (NextGen-Beta)",
+    "SessionDurationHours": 6,
+    "NeuralLoadGhz": 4.5,
+    "StressLevel": 9
+  }
+]
